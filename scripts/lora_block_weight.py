@@ -413,10 +413,10 @@ class Script(modules.scripts.Script):
             if params.sampling_step == 0:
                 if self.te_scheduler:
                     for key, steps_te in self.te_scheduler.items():
-                            setparams(self, key, 0, 0, [])
+                            setparams(self, key, 0, "*", [])
                 if self.unet_scheduler:
                     for key, steps_unet in self.unet_scheduler.items():
-                            setparams(self, key, 0, 0, [])							
+                            setparams(self, key, "*", 0, [])							
 
             if self.te_scheduler:
                 for key, steps_te in self.te_scheduler.items():
