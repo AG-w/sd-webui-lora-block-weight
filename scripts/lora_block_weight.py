@@ -22,6 +22,37 @@ from modules.shared import cmd_opts, opts, state
 from modules.processing import process_images, Processed
 from modules.script_callbacks import CFGDenoiserParams, on_cfg_denoiser
 
+def sorted_positions(raw_steps):
+    steps = [[float(s.strip()) for s in re.split("[@~]", x)]
+             for x in re.split("[,;]", str(raw_steps))]
+    # If we just got a single number, just return it
+    if len(steps[0]) == 1:
+        return steps[0][0]
+
+    # Add implicit 1s to any steps which don't have a weight
+    steps = [[s[0], s[1] if len(s) == 2 else 1] for s in steps]
+
+    # Sort by index
+    steps.sort(key=lambda k: k[1])
+
+    steps = [list(v) for v in zip(*steps)]
+    return steps
+	
+def calculate_weight(steplist, current_step, max_steps):
+    if isinstance(steplist, list):
+        if steplist[1][-1] <= 1.0:
+            if max_steps > 0:
+                current_step = (current_step) / (max_steps - 2)
+            else:
+                current_step = 1.0
+        else:
+            current_step = current_step
+        v = np.interp(current_step, steplist[1], steplist[0])
+        return v
+    else:
+        return steplist	
+
+
 LBW_T = "customscript/lora_block_weight.py/txt2img/Active/value"
 LBW_I = "customscript/lora_block_weight.py/img2img/Active/value"
 
@@ -107,6 +138,8 @@ class Script(modules.scripts.Script):
         self.log = {}
         self.stops = {}
         self.starts = {}
+        self.te_scheduler = {}
+        self.unet_scheduler = {}
         self.active = False
         self.lora = {}
         self.lycoris = {}
@@ -344,8 +377,8 @@ class Script(modules.scripts.Script):
             for dicts in [self.lora,self.lycoris,self.networks]:
                 for lora in dicts:
                     if lora.name.split("_in_LBW_")[0] == key:
-                        lora.te_multiplier = te
-                        lora.unet_multiplier = u
+                        lora.te_multiplier = te if te != "*" else lora.te_multiplier
+                        lora.unet_multiplier = u if u != "*" else lora.unet_multiplier
                         sets.append(key)
 
         if forge and self.active:
@@ -377,6 +410,21 @@ class Script(modules.scripts.Script):
                 shared.sd_model.forge_objects.unet.patch_model()
 
         elif self.active:
+            if params.sampling_step == 0:
+                if self.te_scheduler:
+                    for key, steps_te in self.te_scheduler.items():
+                            setparams(self, key, 0, 0, [])
+                if self.unet_scheduler:
+                    for key, steps_unet in self.unet_scheduler.items():
+                            setparams(self, key, 0, 0, [])							
+
+            if self.te_scheduler:
+                for key, steps_te in self.te_scheduler.items():
+                    setparams(self, key, calculate_weight(steps_te, params.sampling_step, params.total_sampling_steps), "*", [])              
+            if self.unet_scheduler:
+                for key, steps_unet in self.unet_scheduler.items():
+                    setparams(self, key, "*", calculate_weight(steps_unet, params.sampling_step, params.total_sampling_steps), [])  
+            
             if self.starts and params.sampling_step == 0:
                 for key, step_te_u in self.starts.items():
                     setparams(self, key, 0, 0, [])
@@ -722,6 +770,9 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
         _, extra_network_data = extra_networks.parse_prompts(prompts)
     moduletypes = extra_network_data.keys()
 
+    self.te_scheduler = {}
+    self.unet_scheduler = {}
+
     for ltype in moduletypes:
         lorans = []
         lorars = []
@@ -739,8 +790,21 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
             items = called.items
             setnow = False
             name = items[0]
-            te = syntaxdealer(items,"te=",1)
-            unet = syntaxdealer(items,"unet=",2)
+            
+            raw_te = te = syntaxdealer(items,"te=",1)
+            raw_unet = unet = syntaxdealer(items,"unet=",2)            
+            if te is None and unet is not None: raw_te = te = unet
+            if unet is None and te is not None: raw_unet = unet = te
+            if "te=" not in items[1] and "unet=" not in items[1] and "@" in items[1]: te = unet = items[1]
+			
+            if te != None and isinstance(te, str) and "@" in te:
+                self.te_scheduler[name] = sorted_positions(te)
+                #self.log["te_scheduler"] = load = True
+                te = self.te_scheduler[name][0][0] if self.te_scheduler[name][1][0] == 0 else 1
+            if unet != None and isinstance(unet, str) and "@" in unet:
+                self.unet_scheduler[name] = sorted_positions(unet)
+                #self.log["unet_scheduler"] = load = True
+                unet = self.unet_scheduler[name][0][0] if self.unet_scheduler[name][1][0] == 0 else 1
             te,unet = multidealer(te,unet)
 
             weights = syntaxdealer(items,"lbw=",2) if syntaxdealer(items,"lbw=",2) is not None else syntaxdealer(items,"w=",2)
@@ -776,7 +840,7 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
                 elem = ""
 
             if setnow:
-                print(f"LoRA Block weight ({ltype}): {name}: (Te:{te},Unet:{unet}) x {ratios}")
+                print(f"LoRA Block weight ({ltype}): {name}: (Te:{raw_te},Unet:{raw_unet}) x {ratios}")
                 go_lbw = True
             fparams.append([unet,ratios,elem])
             settolist([lorans,te_multipliers,unet_multipliers,lorars,elements,starts,stops],[name,te,unet,ratios,elem,start,stop])
