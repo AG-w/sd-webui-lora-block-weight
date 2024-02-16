@@ -795,7 +795,7 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
             raw_unet = unet = syntaxdealer(items,"unet=",2)            
             if te is None and unet is not None: raw_te = te = unet
             if unet is None and te is not None: raw_unet = unet = te
-            if "te=" not in items[1] and "unet=" not in items[1] and "@" in items[1]: te = unet = items[1]
+            if "te=" not in items[1] and "unet=" not in items[1] and "@" in items[1]: raw_te = raw_unet = te = unet = items[1]
 			
             if te != None and isinstance(te, str) and "@" in te:
                 self.te_scheduler[name] = sorted_positions(te)
