@@ -826,9 +826,11 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
 			
             if te != None and isinstance(te, str) and "@" in te:
                 self.te_scheduler[name] = sorted_positions(te)
+		setnow = True  
                 te = self.te_scheduler[name][0][0] if self.te_scheduler[name][1][0] == 0 else 0
             if unet != None and isinstance(unet, str) and "@" in unet:
                 self.unet_scheduler[name] = sorted_positions(unet)
+		setnow = True
                 unet = self.unet_scheduler[name][0][0] if self.unet_scheduler[name][1][0] == 0 else 0
 		    
             te,unet = multidealer(te,unet)
