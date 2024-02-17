@@ -22,6 +22,12 @@ from modules.shared import cmd_opts, opts, state
 from modules.processing import process_images, Processed
 from modules.script_callbacks import CFGDenoiserParams, on_cfg_denoiser
 
+from pathlib import Path
+lora_path = str(Path(__file__).parent.parent.parent.parent.parent / "extensions-builtin" / "Lora")
+sys.path.insert(0, lora_path)
+import network, networks, network_lora, extra_networks_lora
+sys.path.remove(lora_path)
+
 def sorted_positions(raw_steps):
     steps = [[float(s.strip()) for s in re.split("[@~]", x)]
              for x in re.split("[,;]", str(raw_steps))]
@@ -50,8 +56,22 @@ def calculate_weight(steplist, current_step, max_steps):
         v = np.interp(current_step, steplist[1], steplist[0])
         return v
     else:
-        return steplist	
-
+        return steplist
+	    
+class Scheduler_network(extra_networks_lora.ExtraNetworkLora):
+    # Hijack the params parser and feed it dummy weights instead so it doesn't choke trying to
+    # parse our extended syntax
+    def activate(self, p, params_list):
+        for params in params_list:
+            assert params.items
+            name = params.positional[0]
+            #if lora_weights.get(name, None) == None:
+            #    lora_weights[name] = lora_params_to_weights(params)
+            # The hardcoded 1 weight is fine here, since our actual patch looks up the weights from
+            # our lora_weights dict
+            params.positional = [name, 1]
+            params.named = {}
+        return super().activate(p, params_list)
 
 LBW_T = "customscript/lora_block_weight.py/txt2img/Active/value"
 LBW_I = "customscript/lora_block_weight.py/img2img/Active/value"
@@ -138,6 +158,7 @@ class Script(modules.scripts.Script):
         self.log = {}
         self.stops = {}
         self.starts = {}
+	self.scheduler_network = None
         self.te_scheduler = {}
         self.unet_scheduler = {}
         self.active = False
@@ -332,7 +353,13 @@ class Script(modules.scripts.Script):
     def process(self, p, loraratios,useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug):
         #print("self =",self,"p =",p,"presets =",loraratios,"useblocks =",useblocks,"xyzsettings =",xyzsetting,"xtype =",xtype,"xmen =",xmen,"ytype =",ytype,"ymen =",ymen,"ztype =",ztype,"zmen =",zmen)
         #Note that this does not use the default arg syntax because the default args are supposed to be at the end of the function
-        if(loraratios == None):
+        if self.scheduler_network is None and type(extra_networks.extra_network_registry["lora"]) != Scheduler_network:
+            self.scheduler_network = extra_networks.extra_network_registry["lora"]
+            self.scheduler_network = Scheduler_network()
+            extra_networks.register_extra_network(self.scheduler_network)
+            extra_networks.register_extra_network_alias(self.scheduler_network, "lora_weight_scheduler")
+		
+	if(loraratios == None):
             loraratios = DEF_WEIGHT_PRESET
         if(useblocks == None):
             useblocks = True
@@ -799,14 +826,11 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
 			
             if te != None and isinstance(te, str) and "@" in te:
                 self.te_scheduler[name] = sorted_positions(te)
-                #self.log["te_scheduler"] = load = True
                 te = self.te_scheduler[name][0][0] if self.te_scheduler[name][1][0] == 0 else 0
-                #te = sorted_positions(te)[0][0] if sorted_positions(te)[1][0] == 0 else 0
             if unet != None and isinstance(unet, str) and "@" in unet:
                 self.unet_scheduler[name] = sorted_positions(unet)
-                #self.log["unet_scheduler"] = load = True
                 unet = self.unet_scheduler[name][0][0] if self.unet_scheduler[name][1][0] == 0 else 0
-                #unet = sorted_positions(unet)[0][0] if sorted_positions(unet)[1][0] == 0 else 0
+		    
             te,unet = multidealer(te,unet)
 
             weights = syntaxdealer(items,"lbw=",2) if syntaxdealer(items,"lbw=",2) is not None else syntaxdealer(items,"w=",2)
