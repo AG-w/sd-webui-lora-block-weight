@@ -1,6 +1,6 @@
-# LoRA Block Weight (compatible with sd-webui-loractl )
+# LoRA Block Weight (compatible with sd-webui-loractl)
 Note: This is a poor attempt to make loractl https://github.com/cheald/sd-webui-loractl compatible with LBW    
-I didn't touch start/stop function, all I did is fix `x@y` syntax from cheald's extension    
+I didn't touch start/stop function, all I did is fix `x@y` syntax from loractl extension    
 
 ###
 - custom script for [AUTOMATIC1111's stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) 
