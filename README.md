@@ -1,7 +1,7 @@
-# LoRA Block Weight (with dynamic weight)
-Note: This is a poor attempt to add lora dynamic weight from https://github.com/cheald/sd-webui-loractl    
-I didn't touch start/stop function, all I did is added `x@y` syntax from cheald's extension    
-making 2 extensions compatible with each other is a pain so I chose the shortcut
+# LoRA Block Weight (compatible with sd-webui-loractl )
+Note: This is a poor attempt to make loractl https://github.com/cheald/sd-webui-loractl compatible with LBW    
+I didn't touch start/stop function, all I did is fix `x@y` syntax from cheald's extension    
+
 ###
 - custom script for [AUTOMATIC1111's stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) 
 - When applying Lora, strength can be set block by block.
