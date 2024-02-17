@@ -800,11 +800,11 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
             if te != None and isinstance(te, str) and "@" in te:
                 self.te_scheduler[name] = sorted_positions(te)
                 #self.log["te_scheduler"] = load = True
-                te = self.te_scheduler[name][0][0] if self.te_scheduler[name][1][0] == 0 else 1
+                te = self.te_scheduler[name][0][0] if self.te_scheduler[name][1][0] == 0 else 0
             if unet != None and isinstance(unet, str) and "@" in unet:
                 self.unet_scheduler[name] = sorted_positions(unet)
                 #self.log["unet_scheduler"] = load = True
-                unet = self.unet_scheduler[name][0][0] if self.unet_scheduler[name][1][0] == 0 else 1
+                unet = self.unet_scheduler[name][0][0] if self.unet_scheduler[name][1][0] == 0 else 0
             te,unet = multidealer(te,unet)
 
             weights = syntaxdealer(items,"lbw=",2) if syntaxdealer(items,"lbw=",2) is not None else syntaxdealer(items,"w=",2)
