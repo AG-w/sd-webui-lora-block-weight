@@ -797,8 +797,8 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
         _, extra_network_data = extra_networks.parse_prompts(prompts)
     moduletypes = extra_network_data.keys()
 
-    self.te_scheduler = {}
-    self.unet_scheduler = {}
+    self.te_scheduler.clear()
+    self.unet_scheduler.clear()
 
     for ltype in moduletypes:
         lorans = []
