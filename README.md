@@ -1,5 +1,5 @@
 # LoRA Block Weight (with dynamic weight)
-Note: This is a poor attempt to add dynamic lora weight from loractl https://github.com/cheald/sd-webui-loractl to LBW    
+Note: This is a poor attempt to add dynamic lora weight from [loractl](https://github.com/cheald/sd-webui-loractl) to LBW    
 I didn't touch start/stop function, all I did is patch `x@y` syntax from loractl extension    
 syntax example: `<lora:vectorer:te=0.1:unet=0@0,0.15@0.5:lbw=OUTALL>`
 
