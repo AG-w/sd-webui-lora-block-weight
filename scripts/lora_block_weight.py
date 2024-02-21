@@ -43,8 +43,18 @@ def sorted_positions(raw_steps):
 
     steps = [list(v) for v in zip(*steps)]
     return steps
-	
-def calculate_weight(steplist, current_step, max_steps):
+
+def step_function(x, xp, yp):
+    for i, v in enumerate(xp):
+        if i == 0 and xp[i] > x:
+            return yp[i]
+        elif i == len(yp) - 1 and xp[i] <= x:
+            return yp[i]
+        elif xp[i] <= x and xp[i+1] > x:
+            return yp[i]
+    return 0
+
+def calculate_weight(steplist, current_step, max_steps, stepping=False):
     if isinstance(steplist, list):
         if steplist[1][-1] <= 1.0:
             if max_steps > 0:
@@ -53,7 +63,10 @@ def calculate_weight(steplist, current_step, max_steps):
                 current_step = 1.0
         else:
             current_step = current_step
-        v = np.interp(current_step, steplist[1], steplist[0])
+	if not stepping:	
+            v = np.interp(current_step, steplist[1], steplist[0])
+	else:
+            v = step_function(current_step, steplist[1], steplist[0])    
         return v
     else:
         return steplist
@@ -161,6 +174,7 @@ class Script(modules.scripts.Script):
 	self.scheduler_network = None
         self.te_scheduler = {}
         self.unet_scheduler = {}
+	self.stepping_scheduler = False
         self.active = False
         self.lora = {}
         self.lycoris = {}
@@ -243,6 +257,7 @@ class Script(modules.scripts.Script):
             with gr.Row():
                 with gr.Column(min_width = 50, scale=1):
                     lbw_useblocks =  gr.Checkbox(value = True,label="Active",interactive =True,elem_id="lbw_active")
+		    stepping_scheduler = gr.Checkbox(value = False,label="Step function",interactive =True,elem_id="lbw_lora_stepping")
                     debug =  gr.Checkbox(value = False,label="Debug",interactive =True,elem_id="lbw_debug")
                 with gr.Column(scale=5):
                     bw_ratiotags= gr.TextArea(label="",value=ratiostags,visible =True,interactive =True,elem_id="lbw_ratios") 
@@ -284,6 +299,7 @@ class Script(modules.scripts.Script):
                 d_false = gr.Checkbox(value = False,visible = False)
             
             lbw_useblocks.change(fn=lambda x:gr.update(label = f"LoRA Block Weight : {'Active' if x else 'Not Active'}"),inputs=lbw_useblocks, outputs=[acc])
+	    stepping_scheduler.change(fn = lambda x: setattr(self, 'stepping_scheduler', x), inputs = stepping_scheduler)
 
         import subprocess
         def openeditors(b):
@@ -447,10 +463,10 @@ class Script(modules.scripts.Script):
 
             if self.te_scheduler:
                 for key, steps_te in self.te_scheduler.items():
-                    setparams(self, key, calculate_weight(steps_te, params.sampling_step, params.total_sampling_steps), "*", [])              
+                    setparams(self, key, calculate_weight(steps_te, params.sampling_step, params.total_sampling_steps, self.stepping_scheduler), "*", [])              
             if self.unet_scheduler:
                 for key, steps_unet in self.unet_scheduler.items():
-                    setparams(self, key, "*", calculate_weight(steps_unet, params.sampling_step, params.total_sampling_steps), [])  
+                    setparams(self, key, "*", calculate_weight(steps_unet, params.sampling_step, params.total_sampling_steps, self.stepping_scheduler), [])  
             
             if self.starts and params.sampling_step == 0:
                 for key, step_te_u in self.starts.items():
