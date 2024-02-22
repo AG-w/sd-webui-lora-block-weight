@@ -47,7 +47,7 @@ def sorted_positions(raw_steps):
 def step_function(x, xp, yp):
     for i, v in enumerate(xp):
         if i == 0 and xp[i] > x:
-            return yp[i]
+            return 0
         elif i == len(yp) - 1 and xp[i] <= x:
             return yp[i]
         elif xp[i] <= x and xp[i+1] > x:
