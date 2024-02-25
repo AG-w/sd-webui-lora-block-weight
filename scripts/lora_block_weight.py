@@ -364,9 +364,9 @@ class Script(modules.scripts.Script):
 
         xyzsetting.change(fn=urawaza,inputs=[xyzsetting],outputs =[xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,esets])
 
-        return lbw_loraratios,lbw_useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug
+        return lbw_loraratios,lbw_useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug,stepping_scheduler
 
-    def process(self, p, loraratios,useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug):
+    def process(self, p, loraratios,useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug,stepping_scheduler):
         #print("self =",self,"p =",p,"presets =",loraratios,"useblocks =",useblocks,"xyzsettings =",xyzsetting,"xtype =",xtype,"xmen =",xmen,"ytype =",ytype,"ymen =",ymen,"ztype =",ztype,"zmen =",zmen)
         #Note that this does not use the default arg syntax because the default args are supposed to be at the end of the function
         if self.scheduler_network is None and type(extra_networks.extra_network_registry["lora"]) != Scheduler_network:
@@ -374,7 +374,10 @@ class Script(modules.scripts.Script):
             self.scheduler_network = Scheduler_network()
             extra_networks.register_extra_network(self.scheduler_network)
             extra_networks.register_extra_network_alias(self.scheduler_network, "lora_weight_scheduler")
-		
+
+	if stepping_scheduler:
+            self.stepping_scheduler = stepping_scheduler.value    
+	    
 	if(loraratios == None):
             loraratios = DEF_WEIGHT_PRESET
         if(useblocks == None):
