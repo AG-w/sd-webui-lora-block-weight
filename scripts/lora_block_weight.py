@@ -375,8 +375,8 @@ class Script(modules.scripts.Script):
             extra_networks.register_extra_network(self.scheduler_network)
             extra_networks.register_extra_network_alias(self.scheduler_network, "lora_weight_scheduler")
 
-	if stepping_scheduler:
-            self.stepping_scheduler = stepping_scheduler.value    
+	if stepping_scheduler is not None:
+            self.stepping_scheduler = stepping_scheduler    
 	    
 	if(loraratios == None):
             loraratios = DEF_WEIGHT_PRESET
