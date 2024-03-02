@@ -301,6 +301,9 @@ class Script(modules.scripts.Script):
             lbw_useblocks.change(fn=lambda x:gr.update(label = f"LoRA Block Weight : {'Active' if x else 'Not Active'}"),inputs=lbw_useblocks, outputs=[acc])
 	    stepping_scheduler.change(fn = lambda x: setattr(self, 'stepping_scheduler', x), inputs = stepping_scheduler)
 
+	self.infotext_fields = (
+            (stepping_scheduler, lambda d: gr.Checkbox.update(value="Dynamic lora weights step function" in d)),)	
+	    
         import subprocess
         def openeditors(b):
             path = extpath if b else extpathe
@@ -417,6 +420,8 @@ class Script(modules.scripts.Script):
 
             if not hasattr(self,"lbt_dr_callbacks"):
                 self.lbt_dr_callbacks = on_cfg_denoiser(self.denoiser_callback)
+		    
+	p.extra_generation_params["Dynamic lora weights step function"] = stepping_scheduler
 
     def denoiser_callback(self, params: CFGDenoiserParams):
         def setparams(self, key, te, u ,sets):
