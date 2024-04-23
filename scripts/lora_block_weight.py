@@ -63,9 +63,9 @@ def calculate_weight(steplist, current_step, max_steps, stepping=False):
                 current_step = 1.0
         else:
             current_step = current_step
-	if not stepping:	
+        if not stepping:	
             v = np.interp(current_step, steplist[1], steplist[0])
-	else:
+        else:
             v = step_function(current_step, steplist[1], steplist[0])    
         return v
     else:
@@ -179,10 +179,10 @@ class Script(modules.scripts.Script):
 
         self.stopsf = []
         self.startsf = []
-	self.scheduler_network = None
+        self.scheduler_network = None
         self.te_scheduler = {}
         self.unet_scheduler = {}
-	self.stepping_scheduler = False
+        self.stepping_scheduler = False
         self.uf = []
         self.lf = []
         self.ef = []
@@ -470,7 +470,7 @@ class Script(modules.scripts.Script):
             extra_networks.register_extra_network(self.scheduler_network)
             extra_networks.register_extra_network_alias(self.scheduler_network, "lora_weight_scheduler")
             
-	    if stepping_scheduler is not None:
+        if stepping_scheduler is not None:
             self.stepping_scheduler = stepping_scheduler    
             
         if(loraratios == None):
@@ -941,11 +941,11 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
 
             if te != None and isinstance(te, str) and "@" in te:
                 self.te_scheduler[name] = sorted_positions(te)
-		        setnow = True  
+                setnow = True  
                 te = self.te_scheduler[name][0][0] if self.te_scheduler[name][1][0] == 0 else 0
             if unet != None and isinstance(unet, str) and "@" in unet:
                 self.unet_scheduler[name] = sorted_positions(unet)
-		        setnow = True
+                setnow = True
                 unet = self.unet_scheduler[name][0][0] if self.unet_scheduler[name][1][0] == 0 else 0
             
             te,unet = multidealer(te,unet)
