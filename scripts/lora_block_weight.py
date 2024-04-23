@@ -179,10 +179,10 @@ class Script(modules.scripts.Script):
 
         self.stopsf = []
         self.startsf = []
-	    self.scheduler_network = None
+	self.scheduler_network = None
         self.te_scheduler = {}
         self.unet_scheduler = {}
-	    self.stepping_scheduler = False
+	self.stepping_scheduler = False
         self.uf = []
         self.lf = []
         self.ef = []
