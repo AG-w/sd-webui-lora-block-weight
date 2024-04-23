@@ -22,6 +22,70 @@ from modules.shared import cmd_opts, opts, state
 from modules.processing import process_images, Processed
 from modules.script_callbacks import CFGDenoiserParams, on_cfg_denoiser
 
+from pathlib import Path
+lora_path = str(Path(__file__).parent.parent.parent.parent.parent / "extensions-builtin" / "Lora")
+sys.path.insert(0, lora_path)
+import network, networks, network_lora, extra_networks_lora
+sys.path.remove(lora_path)
+
+def sorted_positions(raw_steps):
+    steps = [[float(s.strip()) for s in re.split("[@~]", x)]
+             for x in re.split("[,;]", str(raw_steps))]
+    # If we just got a single number, just return it
+    if len(steps[0]) == 1:
+        return steps[0][0]
+
+    # Add implicit 1s to any steps which don't have a weight
+    steps = [[s[0], s[1] if len(s) == 2 else 1] for s in steps]
+
+    # Sort by index
+    steps.sort(key=lambda k: k[1])
+
+    steps = [list(v) for v in zip(*steps)]
+    return steps
+
+def step_function(x, xp, yp):
+    for i, v in enumerate(xp):
+        if i == 0 and xp[i] > x:
+            return 0
+        elif i == len(yp) - 1 and xp[i] <= x:
+            return yp[i]
+        elif xp[i] <= x and xp[i+1] > x:
+            return yp[i]
+    return 0
+
+def calculate_weight(steplist, current_step, max_steps, stepping=False):
+    if isinstance(steplist, list):
+        if steplist[1][-1] <= 1.0:
+            if max_steps > 0:
+                current_step = (current_step) / (max_steps - 2)
+            else:
+                current_step = 1.0
+        else:
+            current_step = current_step
+	if not stepping:	
+            v = np.interp(current_step, steplist[1], steplist[0])
+	else:
+            v = step_function(current_step, steplist[1], steplist[0])    
+        return v
+    else:
+        return steplist
+
+class Scheduler_network(extra_networks_lora.ExtraNetworkLora):
+    # Hijack the params parser and feed it dummy weights instead so it doesn't choke trying to
+    # parse our extended syntax
+    def activate(self, p, params_list):
+        for params in params_list:
+            assert params.items
+            name = params.positional[0]
+            #if lora_weights.get(name, None) == None:
+            #    lora_weights[name] = lora_params_to_weights(params)
+            # The hardcoded 1 weight is fine here, since our actual patch looks up the weights from
+            # our lora_weights dict
+            params.positional = [name, 1]
+            params.named = {}
+        return super().activate(p, params_list)
+
 LBW_T = "customscript/lora_block_weight.py/txt2img/Active/value"
 LBW_I = "customscript/lora_block_weight.py/img2img/Active/value"
 
@@ -115,6 +179,10 @@ class Script(modules.scripts.Script):
 
         self.stopsf = []
         self.startsf = []
+	    self.scheduler_network = None
+        self.te_scheduler = {}
+        self.unet_scheduler = {}
+	    self.stepping_scheduler = False
         self.uf = []
         self.lf = []
         self.ef = []
@@ -190,6 +258,7 @@ class Script(modules.scripts.Script):
             with gr.Row():
                 with gr.Column(min_width = 50, scale=1):
                     lbw_useblocks =  gr.Checkbox(value = True,label="Active",interactive =True,elem_id="lbw_active")
+                    stepping_scheduler = gr.Checkbox(value = False,label="Step function",interactive =True,elem_id="lbw_lora_stepping")
                     debug =  gr.Checkbox(value = False,label="Debug",interactive =True,elem_id="lbw_debug")
                 with gr.Column(scale=5):
                     bw_ratiotags= gr.TextArea(label="",value=ratiostags,visible =True,interactive =True,elem_id="lbw_ratios") 
@@ -310,6 +379,10 @@ class Script(modules.scripts.Script):
                 d_false = gr.Checkbox(value = False,visible = False)
 
             lbw_useblocks.change(fn=lambda x:gr.update(label = f"LoRA Block Weight : {'Active' if x else 'Not Active'}"),inputs=lbw_useblocks, outputs=[acc])
+            stepping_scheduler.change(fn = lambda x: setattr(self, 'stepping_scheduler', x), inputs = stepping_scheduler)
+        
+        self.infotext_fields = (
+            (stepping_scheduler, lambda d: gr.Checkbox.update(value="Dynamic lora weights step function" in d)),)	    
 
         def makeweights(sdver, *blocks):
             sdver = int(sdver[:2])
@@ -385,11 +458,21 @@ class Script(modules.scripts.Script):
 
         xyzsetting.change(fn=urawaza,inputs=[xyzsetting],outputs =[xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,esets])
 
-        return lbw_loraratios,lbw_useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug
+        return lbw_loraratios,lbw_useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug,stepping_scheduler
 
-    def process(self, p, loraratios,useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug):
+    def process(self, p, loraratios,useblocks,xyzsetting,xtype,xmen,ytype,ymen,ztype,zmen,exmen,eymen,ecount,diffcol,thresh,revxy,elemental,elemsets,debug,stepping_scheduler):
         #print("self =",self,"p =",p,"presets =",loraratios,"useblocks =",useblocks,"xyzsettings =",xyzsetting,"xtype =",xtype,"xmen =",xmen,"ytype =",ytype,"ymen =",ymen,"ztype =",ztype,"zmen =",zmen)
         #Note that this does not use the default arg syntax because the default args are supposed to be at the end of the function
+
+        if self.scheduler_network is None and type(extra_networks.extra_network_registry["lora"]) != Scheduler_network:
+            self.scheduler_network = extra_networks.extra_network_registry["lora"]
+            self.scheduler_network = Scheduler_network()
+            extra_networks.register_extra_network(self.scheduler_network)
+            extra_networks.register_extra_network_alias(self.scheduler_network, "lora_weight_scheduler")
+            
+	    if stepping_scheduler is not None:
+            self.stepping_scheduler = stepping_scheduler    
+            
         if(loraratios == None):
             loraratios = DEF_WEIGHT_PRESET
         if(useblocks == None):
@@ -429,14 +512,14 @@ class Script(modules.scripts.Script):
 
             if not hasattr(self,"lbt_dr_callbacks"):
                 self.lbt_dr_callbacks = on_cfg_denoiser(self.denoiser_callback)
-
+        p.extra_generation_params["Dynamic lora weights step function"] = stepping_scheduler
     def denoiser_callback(self, params: CFGDenoiserParams):
         def setparams(self, key, te, u ,sets):
             for dicts in [self.lora,self.lycoris,self.networks]:
                 for lora in dicts:
                     if lora.name.split("_in_LBW_")[0] == key:
-                        lora.te_multiplier = te
-                        lora.unet_multiplier = u
+                        lora.te_multiplier = te if te != "*" else lora.te_multiplier
+                        lora.unet_multiplier = u if u != "*" else lora.unet_multiplier
                         sets.append(key)
 
         if forge and self.active:
@@ -468,6 +551,20 @@ class Script(modules.scripts.Script):
                 shared.sd_model.forge_objects.unet.patch_model()
 
         elif self.active:
+            if params.sampling_step == 0:
+                if self.te_scheduler:
+                    for key, steps_te in self.te_scheduler.items():
+                            setparams(self, key, 0, "*", [])
+                if self.unet_scheduler:
+                    for key, steps_unet in self.unet_scheduler.items():
+                            setparams(self, key, "*", 0, [])							
+            if self.te_scheduler:
+                for key, steps_te in self.te_scheduler.items():
+                    setparams(self, key, calculate_weight(steps_te, params.sampling_step, params.total_sampling_steps, self.stepping_scheduler), "*", [])              
+            if self.unet_scheduler:
+                for key, steps_unet in self.unet_scheduler.items():
+                    setparams(self, key, "*", calculate_weight(steps_unet, params.sampling_step, params.total_sampling_steps, self.stepping_scheduler), [])  
+                    
             if self.starts and params.sampling_step == 0:
                 for key, step_te_u in self.starts.items():
                     setparams(self, key, 0, 0, [])
@@ -815,6 +912,9 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
         _, extra_network_data = extra_networks.parse_prompts(prompts)
     moduletypes = extra_network_data.keys()
 
+    self.te_scheduler.clear()
+    self.unet_scheduler.clear()
+    
     for ltype in moduletypes:
         lorans = []
         lorars = []
@@ -832,8 +932,22 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
             items = called.items
             setnow = False
             name = items[0]
-            te = syntaxdealer(items,"te=",1)
-            unet = syntaxdealer(items,"unet=",2)
+            
+            raw_te = te = syntaxdealer(items,"te=",1)
+            raw_unet = unet = syntaxdealer(items,"unet=",2)            
+            if te is None and unet is not None: raw_te = te = unet
+            if unet is None and te is not None: raw_unet = unet = te
+            if "te=" not in items[1] and "unet=" not in items[1] and "@" in items[1]: raw_te = raw_unet = te = unet = items[1]
+
+            if te != None and isinstance(te, str) and "@" in te:
+                self.te_scheduler[name] = sorted_positions(te)
+		        setnow = True  
+                te = self.te_scheduler[name][0][0] if self.te_scheduler[name][1][0] == 0 else 0
+            if unet != None and isinstance(unet, str) and "@" in unet:
+                self.unet_scheduler[name] = sorted_positions(unet)
+		        setnow = True
+                unet = self.unet_scheduler[name][0][0] if self.unet_scheduler[name][1][0] == 0 else 0
+            
             te,unet = multidealer(te,unet)
 
             weights = syntaxdealer(items,"lbw=",2) if syntaxdealer(items,"lbw=",2) is not None else syntaxdealer(items,"w=",2)
@@ -869,7 +983,7 @@ def loradealer(self, prompts,lratios,elementals, extra_network_data = None):
                 elem = ""
 
             if setnow:
-                print(f"LoRA Block weight ({ltype}): {name}: (Te:{te},Unet:{unet}) x {ratios}")
+                print(f"LoRA Block weight ({ltype}): {name}: (Te:{raw_te},Unet:{raw_unet}) x {ratios}")
                 go_lbw = True
             fparams.append([unet,ratios,elem])
             settolist([lorans,te_multipliers,unet_multipliers,lorars,elements,starts,stops],[name,te,unet,ratios,elem,start,stop])
