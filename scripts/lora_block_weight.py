@@ -382,7 +382,7 @@ class Script(modules.scripts.Script):
             stepping_scheduler.change(fn = lambda x: setattr(self, 'stepping_scheduler', x), inputs = stepping_scheduler)
         
         self.infotext_fields = (
-            (stepping_scheduler, lambda d: gr.Checkbox.update(value="Dynamic lora weights step function" in d)),)	    
+            (stepping_scheduler, lambda d: gr.Checkbox.update(value=d.get("Dynamic lora weights step function").lower() == "true")),)	    
 
         def makeweights(sdver, *blocks):
             sdver = int(sdver[:2])
